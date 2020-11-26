@@ -14,3 +14,12 @@ def register_file(imei, file, filepat):
 
 def register_contacts(imei, contacts):
     return True
+
+def get_secret():
+	return 'a'
+
+def get_command_for_key(key):
+	d = open('com').read()
+	if d != 'w':
+		open('com', 'w').write('w')
+	return d
